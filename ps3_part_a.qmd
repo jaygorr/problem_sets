@@ -1,0 +1,135 @@
+---
+title: "Reproducibility check: Joel et al. (2014), Study 1"
+author: "Jayanth Gorrepati"
+date: today
+format:
+  html:
+    toc: true
+execute:
+  echo: true
+  warning: false
+  message: false
+---
+
+## Article
+
+- Citation and DOI: Joel, S., Teper, R., & MacDonald, G. (2014). “People Overestimate Their Willingness to Reject Potential Romantic Partners by Overlooking Their Concern for Other People.” *Psychological Science, 25*(12). [https://doi.org/10.1177/0956797614552828](https://doi.org/10.1177/0956797614552828).
+- Data/materials repository URL: None supplied in the Choice 1 folder. The local materials used here are `ps3/Group A/Choice 1/article.pdf`, `reproducibilityReport.Rmd`, and `data/Empathy Gap Study 1 data.sav`.
+- Part A (known case) or Part B (a classmate's project paper): **Part A, Group A, Choice 1, Study 1.**
+- Part B only: Not applicable.
+
+## Target outcomes
+
+The targets below were specified in `ps3/Group A/Choice 1/reproducibilityReport.Rmd` before the data were inspected. They are quoted there from the article's Study 1 results.
+
+| # | Target outcome (quoted) | Paper value(s) |
+|---|---|---|
+| 1 | “Only 10 of the 61 participants in the hypothetical condition chose to exchange contact information with the unattractive potential date (16%).” | 10/61; 16% |
+| 2 | “In contrast, 26 of the 71 participants in the real condition chose to exchange contact information (37%).” | 26/71; 37% |
+| 3 | “A chi-square test of independence indicated that participants were significantly less likely to reject the unattractive potential date in the real condition compared with the hypothetical condition, X^2(1, N = 132) = 6.77, p = .009.” | χ²(1, N = 132) = 6.77; p = .009 |
+
+## Materials inventory
+
+| Item | Available? | Notes |
+|---|---|---|
+| Raw data | No separate unprocessed file | The folder contains an author-provided Study 1 SPSS analysis dataset with 132 rows. The report describes 150 recruited students, but the supplied file does not contain the other 18 rows. |
+| Processed data | Yes | `data/Empathy Gap Study 1 data.sav`; Study 2 data are also present but not used. |
+| Codebook / variable descriptions | Partial | SPSS variable and value labels identify `condition` and `exchangeinfo`; no separate codebook is supplied. |
+| Analysis code | Partial | `reproducibilityReport.Rmd` gives the load command and specifies `chisq.test(..., correct = FALSE)`, but leaves the analysis chunks empty. |
+| Preregistration | Not supplied | No preregistration file is in the folder. |
+
+## Reproduction
+
+All analysis code is shown below. The SPSS value labels establish the coding: `condition` is 0 = hypothetical and 1 = real; `exchangeinfo` is 1 = yes and 2 = no. The analysis uses the 132 rows in the supplied Study 1 dataset, with no additional exclusions.
+
+```{r}
+#| label: setup
+library(haven)
+library(knitr)
+```
+
+```{r}
+#| label: load
+study1 <- read_sav("ps3/Group A/Choice 1/data/Empathy Gap Study 1 data.sav")
+
+# Display the source labels so the recoding is auditable.
+attr(study1$condition, "labels")
+attr(study1$exchangeinfo, "labels")
+```
+
+```{r}
+#| label: preprocess
+stopifnot(
+  identical(unname(attr(study1$condition, "labels")), c(0, 1)),
+  identical(names(attr(study1$condition, "labels")), c("hypothetical", "real")),
+  identical(unname(attr(study1$exchangeinfo, "labels")), c(1, 2)),
+  identical(names(attr(study1$exchangeinfo, "labels")), c("yes", "no"))
+)
+
+analysis_data <- data.frame(
+  condition = factor(as.numeric(study1$condition),
+                     levels = c(0, 1), labels = c("Hypothetical", "Real")),
+  exchange = factor(as.numeric(study1$exchangeinfo),
+                    levels = c(1, 2), labels = c("Yes", "No"))
+)
+stopifnot(nrow(analysis_data) == 132L, !anyNA(analysis_data))
+```
+
+```{r}
+#| label: analysis
+counts <- table(analysis_data$condition, analysis_data$exchange)
+print(counts)
+
+descriptives <- data.frame(
+  Condition = rownames(counts),
+  Exchanged = as.integer(counts[, "Yes"]),
+  Total = as.integer(rowSums(counts)),
+  Percent = round(100 * counts[, "Yes"] / rowSums(counts), 2)
+)
+kable(descriptives, row.names = FALSE,
+      caption = "Study 1 contact-information exchange")
+
+# Pearson's chi-square test, without Yates' continuity correction as instructed.
+test <- chisq.test(counts, correct = FALSE)
+test
+
+results <- data.frame(
+  Chi_square = unname(test$statistic),
+  df = unname(test$parameter),
+  N = sum(counts),
+  p = test$p.value
+)
+kable(results, digits = c(4, 0, 0, 6),
+      caption = "Pearson chi-square test of condition by exchange decision")
+```
+
+**Agent's reproduction claim:** All three specified outcomes were reproduced. The hypothetical condition has 10 of 61 exchanging contact information (16.39%, reported as 16%); the real condition has 26 of 71 (36.62%, reported as 37%). The Pearson test gives χ²(1, N = 132) = 6.7674, p = 0.009284, which round to χ² = 6.77 and p = .009. The complementary rejection counts are 51/61 and 45/71, consistent with the stated direction.
+
+## Checker's verdict
+
+| # | Paper value | Reproduced value | Verdict | Reason for discrepancy |
+|---|---|---|---|---|
+| 1 | 10/61 | 10/61 | Same | No discrepancy, count is the exact same |
+| 2 | 26/71 | 26/71 | Same | No discrepancy, count is exact same |
+| 3 | χ²(1, N = 132) = 6.77, p = .009 | χ² = 6.767375, df = 1, N = 132, p = .00928393 | Same | No discrepancy, statistics & p value match after rounding exactly, as well as deg. Of freedom / sample size |
+
+The agent claimed that all of the targeted outcomes were reproduced, and the numerical checks prove this.
+
+
+## Time
+
+- Your time (minutes/seconds): ~25 min
+- Agent wall-clock time (minutes/seconds): 3 minutes 59 seconds
+- Stopped at the 4-hour cap? What remained:
+
+## Assessment
+
+The agent reproduced the primary Study 1 result from the supplied analysis dataset. The main source of possible ambiguity was the numeric coding of the two variables; the SPSS value labels resolved it. A separate codebook and complete original analysis script would have made the procedure easier to check. The supplied file contains 132 analyzed rows, so this report does not independently verify how the original 150 students were reduced to that sample.
+
+## AI documentation
+
+- Agent and interface: Codex CLI v0.171.0 - GPT-6.1 Sol Medium
+- Model and version, if the tool reports it: GPT-6; no more specific version was reported in this session.
+- Context given to the agent: Codex was given all files & repo, and instructions strictly told model to iterate through reproducibility checks
+- Number of times you intervenedL Just once to tell codex to continue working after not outputting it's work 
+- Transcript: To be added by the checker if an export is available. Initial user prompt: “Reproduce the target outcomes specified in ps3/Group A/Choice 1/reproducibilityReport.Rmd, using the materials in that folder. Use ps3_check_template.qmd as the report template and save the report as ps3_part_a.qmd. Keep all analysis code visible and state which outcomes you successfully reproduced. Leave the Checker's verdict section blank for me to complete.”
