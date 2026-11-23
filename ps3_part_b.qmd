@@ -1,10 +1,11 @@
 ---
-title: "Reproducibility check: [Author et al. (Year)]"
-author: "[Your name]"
+title: "Reproducibility check: Boger & Firestone (2026), Experiment 4"
+author: "Jayanth Gorrepati"
 date: today
 format:
   html:
     toc: true
+    theme: none
 execute:
   echo: true
   warning: false
@@ -13,11 +14,10 @@ execute:
 
 ## Article
 
-- Citation and DOI:Boger, T., & Firestone, C. (2026). Complexity is a unified cognitive kind. Nature Human Behaviour.
-- Data/materials repository URL: https://osf.io/42umv/
-- Part B 
-- https://github.com/psych251/boger2026
-- Focusing on effect of Experiment 4, transfer of reward rule between geometric shapes and mathematical expressions compared with 50% chance.
+- Citation and DOI: Boger, T., & Firestone, C. (2026). *Complexity is a unified cognitive kind*. *Nature Human Behaviour*. <https://doi.org/10.1038/s41562-026-02502-8>
+- Data/materials repository URL: <https://osf.io/42umv/>
+- Part B.
+- Classmate's project: <https://github.com/psych251/boger2026>. Its key effect is the pooled Experiment 4 one-shot transfer rate against 50% chance. This analysis uses the original authors' OSF data only. Numbers entered in the classmate's report are not treated as reproduced results.
 
 ## Target outcomes
 
@@ -28,64 +28,137 @@ execute:
 | 3 | binomial test against 50% chance | p = .006 |
 | 4 | 95% confidence interval for transfer probability | 54.0%–73.7% |
 
+These targets were recorded in this file before the data were opened. The paper reports them together in its [Experiment 4 Results and Methods](https://perception.jhu.edu/files/PDFs/26_ComplexityTransfer/BogerFirestone_ComplexityTransfer_2026_NHB.pdf). The Methods also report 100 completed participants, 2 excluded for failing the learning rule, and 3 fast trials among the remaining 1,274 trials.
+
 ## Materials inventory
+
+The authors' [OSF README](https://osf.io/ckpxm/) describes [Archive.zip](https://osf.io/k3sva/), with a folder for each experiment. The files below came from `Archive/E04. Reward-learning (shapes-math)/` and are retained under `data/boger2026_exp4/`.
 
 | Item | Available? | Notes |
 |---|---|---|
-| Raw data | | |
-| Processed data | | |
-| Codebook / variable descriptions | | |
-| Analysis code | | |
-| Preregistration | | |
+| Raw data | Yes | [raw_data.csv](data/boger2026_exp4/data_and_analysis/raw_data.csv): 1,300 pre-exclusion trial rows; primary input below. |
+| Processed data | Yes | [cleaned_data.csv](data/boger2026_exp4/data_and_analysis/cleaned_data.csv): 1,271 rows; comparison only. |
+| Codebook / variable descriptions | Yes | [data_column_details.md](data/boger2026_exp4/data_and_analysis/data_column_details.md) describes the variables. |
+| Analysis code | Yes | [analysis.ipynb](data/boger2026_exp4/data_and_analysis/analysis.ipynb) applies exclusions and `binom.test`. The archive also includes rendered `analysis.html`, experiment [index.html](data/boger2026_exp4/experiment/index.html), and [logTrial.py](data/boger2026_exp4/experiment/logTrial.py). |
+| Preregistration | Yes | [preregistration.pdf](data/boger2026_exp4/preregistration.pdf), also [on AsPredicted](https://aspredicted.org/7bh9-86xn.pdf), dated January 28, 2025. |
+
+No material needed for this numeric reconstruction was missing. The full archive also contains stimuli, which are not needed to recompute this result.
 
 ## Reproduction
 
-The agent's work, under your direction. Keep all code visible.
-
-```{r}
-#| label: setup
-library(tidyverse)
-```
+This analysis starts from the original **raw** data. The preregistration requires complete data, at least 6 rewarded choices among 12 learning trials, then removal of trials with response times below 200 ms. The analysis notebook applies the participant rule before the trial rule. All analysis code is visible and uses base R.
 
 ```{r}
 #| label: load
+raw <- read.csv("data/boger2026_exp4/data_and_analysis/raw_data.csv")
+authors_cleaned <- read.csv("data/boger2026_exp4/data_and_analysis/cleaned_data.csv")
+required <- c("subjectID", "blockNum", "trialID", "rt", "gotReward",
+              "isTransferTrial", "response")
+stopifnot(all(required %in% names(raw)), all(raw$gotReward %in% c(0, 1)))
+cat("Raw rows:", nrow(raw), "; participants:", length(unique(raw$subjectID)), "\n")
 ```
 
 ```{r}
 #| label: preprocess
+per_subject <- do.call(rbind, lapply(split(raw, raw$subjectID), function(x) {
+  learning <- x[x$blockNum == 0, ]
+  transfer <- x[x$blockNum == 1, ]
+  data.frame(
+    subjectID = x$subjectID[1],
+    complete = nrow(x) == 13 && nrow(learning) == 12 &&
+      nrow(transfer) == 1 && all(0:12 %in% x$trialID) &&
+      all(!is.na(x$rt)) && all(!is.na(x$gotReward)) &&
+      all(!is.na(x$response)),
+    learning_rewarded = sum(learning$gotReward),
+    learning_n = nrow(learning)
+  )
+}))
+rownames(per_subject) <- NULL
+
+incomplete_ids <- per_subject$subjectID[!per_subject$complete]
+complete_raw <- raw[!raw$subjectID %in% incomplete_ids, ]
+low_learning_ids <- per_subject$subjectID[
+  per_subject$complete & per_subject$learning_rewarded < 6
+]
+after_participants <- complete_raw[
+  !complete_raw$subjectID %in% low_learning_ids, ]
+fast_trials <- after_participants[after_participants$rt < 200, ]
+analyzed <- after_participants[after_participants$rt >= 200, ]
+
+cat("Incomplete participants:", length(incomplete_ids), "\n")
+cat("Excluded for fewer than 6/12 rewarded learning trials:",
+    length(low_learning_ids), "\n")
+print(per_subject[per_subject$subjectID %in% low_learning_ids,
+                  c("subjectID", "learning_rewarded", "learning_n")])
+cat("Rows after participant exclusions:", nrow(after_participants), "\n")
+cat("Trials excluded for RT < 200 ms:", nrow(fast_trials), "\n")
+print(fast_trials[, c("subjectID", "blockNum", "trialID", "rt")])
+cat("Fast transfer trials:", sum(fast_trials$blockNum == 1), "\n")
+cat("Analyzed trial rows:", nrow(analyzed), "\n")
+
+matches_cleaned <- identical(names(analyzed), names(authors_cleaned)) &&
+  nrow(analyzed) == nrow(authors_cleaned) &&
+  isTRUE(all.equal(unname(as.matrix(analyzed)),
+                   unname(as.matrix(authors_cleaned)),
+                   check.attributes = FALSE))
+cat("Reconstruction matches authors' cleaned file:", matches_cleaned, "\n")
+stopifnot(matches_cleaned)
 ```
+
+The notebook filters `rt > 200`, while the preregistration says to exclude trials *below* 200 ms. There are no retained-participant trials at exactly 200 ms, so this boundary difference does not change the result.
 
 ```{r}
 #| label: analysis
+transfer <- analyzed[analyzed$blockNum == 1 &
+                       analyzed$isTransferTrial == 1, ]
+stopifnot(nrow(transfer) == length(unique(transfer$subjectID)))
+reward_consistent <- sum(transfer$gotReward == 1)
+analyzed_n <- nrow(transfer)
+test <- binom.test(reward_consistent, analyzed_n,
+                   p = 0.5, alternative = "two.sided")
+
+cat("Analyzed participants / transfer trials:", analyzed_n, "\n")
+cat("Reward-consistent choices:", reward_consistent, "\n")
+cat(sprintf("Proportion: %d/%d = %.7f (%.1f%%)\n",
+            reward_consistent, analyzed_n, test$estimate,
+            100 * test$estimate))
+cat(sprintf("Two-sided exact binomial p-value: %.9f\n", test$p.value))
+cat(sprintf("Exact 95%% confidence interval: [%.7f, %.7f] (%.1f%% to %.1f%%)\n",
+            test$conf.int[1], test$conf.int[2],
+            100 * test$conf.int[1], 100 * test$conf.int[2]))
 ```
+
+### Statistical findings and discrepancies
+
+From the raw data, **63/98 = 64.2857%** chose the reward-consistent option. The two-sided exact binomial test gives **p = 0.006093** and an exact 95% confidence interval of **53.9702%–73.7127%**. Rounded to the paper's precision, these are **64.3%**, **p = .006**, and **54.0%–73.7%**. All four recorded targets are reproduced numerically. The reconstructed 1,271-row analysis set matches the authors' cleaned file. There is no unresolved numerical discrepancy; the only procedural difference is the inconsequential 200 ms boundary noted above.
 
 ## Checker's verdict
 
-Filled in by you, not the agent.
-
-| # | Paper value | Reproduced value | Verdict (exact / minor / major / not reproducible) | Reason for discrepancy |
+| # | Paper value | Reproduced value | Verdict | Reason for discrepancy |
 |---|---|---|---|---|
-| 1 | | | | |
-| 2 | | | | |
-| 3 | | | | |
+| 1 | N = 98 | N = 98 | Exact | The raw data contain 100 participants, with two failures |
+| 2 | 64.3% | 63/98 = 64.2857% | Exact | The reproduced percentage is around the same with rounding |
+| 3 | p = .006 | p = .006093 | Exact | two-sided exact binomial test against 50% chance matches the same |
+| 4 | 95% CI: 54.0%–73.7% | 95% CI: 53.9702%–73.7127% | Exact | both confidence limits match |
 
-Agent's own claim about success, and whether it was right:
+Agent claims all four checks were reproduced.
 
 ## Time
 
-- Your time (hours):
-- Agent wall-clock time (hours):
-- Stopped at the 4-hour cap? What remained:
+- Your time (hours): 30 minutes
+- Agent wall-clock time (hours): 9 minutes 54 seconds
+- Stopped at the 4-hour cap? What remained: [to be completed by you]
 
 ## Assessment
 
-Is the primary result analytically reproducible? What would have made this take 30 minutes?
+The primary Experiment 4 result is analytically reproducible from the authors' original raw trial data. The raw and cleaned data, variable descriptions, analysis notebook, and preregistration are all available. A direct Experiment 4 download rather than a 98 MB full-study archive, plus an explicit note that the paper uses R's **two-sided** `binom.test`, would have made this faster to locate and verify. The notebook's response time boundary should also agree with the preregistration, even though no observation here falls on that boundary.
 
 ## AI documentation
 
-- Agent and interface (e.g., Claude Code, Codex CLI, Cursor):
-- Model and version, if the tool reports it:
-- Context you gave it (files, instructions, any context file):
-- Number of times you intervened, and the most important intervention:
-- Transcript: link to the exported transcript in your repo (`transcripts/`). If your tool
-  cannot export one, paste your prompts in order here instead.
+- Agent and interface: Codex CLI v0.171.0. - GPT 6.1 Sol
+- Context you gave it: `ps3_reproducibility.qmd`, `ps3_check_template.qmd`, the preselected targets in `ps3_part_b.qmd`, the paper DOI, the authors' OSF repository, and the classmate's project link.
+- Transcript: https://github.com/jaygorr/problem_sets/blob/master/transcripts/part_b_codex.md
+
+## Rendering status
+
+The first render attempt failed during Quarto theme compilation (`Dart` runtime crash). A second sandboxed attempt failed because Quarto could not open its theme-cache database. With `theme: none` and cache write access, `quarto render ps3_part_b.qmd --to html` completed and created `ps3_part_b.html`. Quarto emitted a nonfatal `link-color` warning. These rendering issues did not affect the R analysis or the statistical findings above.
